@@ -20,7 +20,7 @@ logging.basicConfig(format='%(asctime)s %(message)s', filename='train.log', leve
 
 
 class Trainer:
-    def __init__(self, num_epochs: int = 500, cuda: bool = True, continue_from: int = 0):
+    def __init__(self, num_epochs: int = 100, cuda: bool = True, continue_from: int = 0):
         self.features = 16
         self.instances = 64
         self.classes = 2
@@ -123,7 +123,7 @@ class Trainer:
         total_steps = len(self.data_loader)
         logging.info(f'Starting training...')
         for epoch in range(self.continue_from, self.num_epochs):
-            results = []
+            '''results = []
             print("Starting test:")
             for i, data in enumerate(self.test_loader):
                 metas = self.to_variable(data[1])
@@ -136,7 +136,7 @@ class Trainer:
                 fake_metas = self.getMeta(fake_data)
                 results.extend(self.getDistance(fake_metas, metas))
             logging.info(f'{epoch}:{np.mean(np.array(results))}')
-            print(np.mean(np.array(results)))
+            print(np.mean(np.array(results)))'''
 
             for i, data in enumerate(self.data_loader):
                 dataset = self.to_variable(data[0])

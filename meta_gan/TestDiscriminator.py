@@ -24,7 +24,7 @@ if __name__ == '__main__':
                                   lambdas.getLength())
     discriminator.load_state_dict(
         torch.load(
-            f'./models/discriminator-16_64_2-65.pkl'))
+            f'./models/discriminator-16_64_2-50.pkl'))
     discriminator.eval()
     discriminator.cuda()
     mse = MSELoss()

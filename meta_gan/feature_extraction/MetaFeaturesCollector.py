@@ -39,16 +39,18 @@ class MetaFeaturesCollector:
             return self.length
 
     def train(self, path: str):
-        only_files = [f for f in listdir(path) if isfile(join(path, f))]
+        '''only_files = [f for f in listdir(path) if isfile(join(path, f))]
         results = []
         for name in tqdm(only_files):
             stacked = np.load(f'{path}{name}')
             results.append(self.getNumpy(stacked))
         results = np.array(results)
         self.min_max.fit(results)
-        return self.min_max.get_params()
+        return self.min_max.get_params()'''
+        return 0.0
 
     def get(self, stacked: np.ndarray, name_in: str) -> torch.Tensor:
+        '''
         if name_in in self.cache:
             metas, labels_length = self.cache[name_in]
         else:
@@ -61,8 +63,11 @@ class MetaFeaturesCollector:
             metas = self.min_max.transform(metas)
             metas = metas.T
         return torch.from_numpy(metas).float()
+        '''
+        return torch.from_numpy(np.zeros((self.getLength(), 1), dtype=float)).float()
 
     def getShort(self, stacked: np.ndarray) -> torch.Tensor:
+        '''
         zero_in, one_in = stacked[0], stacked[1]
         meta_features = self.meta_features[0].getMeta(zero_in, one_in)
         for meta in self.meta_features[1:]:
@@ -71,8 +76,11 @@ class MetaFeaturesCollector:
         metas = self.min_max.transform(metas)
         metas = metas.T
         return torch.from_numpy(metas).float()
+        '''
+        return torch.from_numpy(np.zeros((self.getLength(), 1), dtype=float)).float()
 
     def getNumpy(self, stacked: np.ndarray) -> np.ndarray:
+        '''
         zero_in = stacked[0]
         one_in = stacked[1]
         meta_features = self.meta_features[0].getMeta(zero_in, one_in)
@@ -80,6 +88,8 @@ class MetaFeaturesCollector:
             meta_features = np.concatenate((meta_features, meta.getMeta(zero_in, one_in)))
         metas = meta_features
         return metas
+        '''
+        return np.zeros(self.getLength(), dtype=float)
 
 
 if __name__ == '__main__':
