@@ -111,21 +111,69 @@ def findMax(zero_in: np.ndarray, one_in: np.ndarray, step: int) -> (int, np.ndar
     return max_col, zero_max_ind, one_max_ind
 
 
+def getDist(a: np.ndarray, b: np.ndarray) -> float:
+    c = a - b
+    c = np.abs(c)
+    c = np.amax(c)
+    return c + 0.00001
+
+
+def getColDistMatrix(zero_in: np.ndarray, one_in: np.ndarray) -> [[(int, int, float)]]:
+    data = np.concatenate((zero_in, one_in), axis=0)
+
+    matrix = []
+    for i in range(target_features):
+        for j in range(i + 1, target_features + 1):
+            if i == 0:
+                matrix.append((i, j, 0.001))
+            else:
+                matrix.append((i, j, getDist(data[:, i - 1], data[:, j - 1])))
+    return matrix
+
+
+def getRowDistMatrix(data_in: np.ndarray) -> [[(int, int, float)]]:
+    matrix = []
+    for i in range(target_instances):
+        for j in range(i + 1, target_instances + 1):
+            if i == 0:
+                matrix.append((i, j, 0.001))
+            else:
+                matrix.append((i, j, getDist(data_in[i - 1], data_in[j - 1])))
+    return matrix
+
+
+import mlrose
+
+
 def sortData(zero_in: np.ndarray, one_in: np.ndarray) -> (np.ndarray, np.ndarray):
     zero_out = np.copy(zero_in)
     one_out = np.copy(one_in)
-    step = target_instances // target_features
-    for col_num in range(target_features):
-        row_num = col_num * step
-        col_max, zero_max, one_max = findMax(zero_out[row_num:, col_num:], one_out[row_num:, col_num:], step)
-        col_max += col_num
-        rows_from = np.array(range(row_num, row_num + 4))
-        zero_max = zero_max + row_num
-        zero_out = swapCol(zero_out, col_num, col_max)
-        zero_out = swapRows(zero_out, rows_from, zero_max, col_num)
-        one_max = one_max + row_num
-        one_out = swapCol(one_out, col_num, col_max)
-        one_out = swapRows(one_out, rows_from, one_max, col_num)
+    # sort cols
+    matrix = getColDistMatrix(zero_in, one_in)
+    problem_fit = mlrose.TSPOpt(length=target_features + 1, maximize=False, distances=matrix)
+    best_state, best_fit = mlrose.genetic_alg(problem_fit, random_state=0, max_iters=50)
+    zero_ind = -np.where(best_state == 0)[0]
+    best_state = np.roll(best_state, zero_ind)
+    best_state = np.delete(best_state, 0) - 1
+    zero_out = zero_out[:, best_state]
+    one_out = one_out[:, best_state]
+    # sort zero rows
+    matrix = getRowDistMatrix(zero_out)
+    problem_fit = mlrose.TSPOpt(length=target_instances + 1, maximize=False, distances=matrix)
+    best_state, best_fit = mlrose.genetic_alg(problem_fit, pop_size=200, random_state=0, max_iters=15)
+    zero_ind = -np.where(best_state == 0)[0]
+    best_state = np.roll(best_state, zero_ind)
+    best_state = np.delete(best_state, 0) - 1
+    zero_out = zero_out[best_state]
+
+    # sort one rows
+    matrix = getRowDistMatrix(one_out)
+    problem_fit = mlrose.TSPOpt(length=target_instances + 1, maximize=False, distances=matrix)
+    best_state, best_fit = mlrose.genetic_alg(problem_fit, pop_size=200, random_state=0, max_iters=15)
+    zero_ind = -np.where(best_state == 0)[0]
+    best_state = np.roll(best_state, zero_ind)
+    best_state = np.delete(best_state, 0) - 1
+    one_out = one_out[best_state]
 
     return zero_out, one_out
 
@@ -156,12 +204,12 @@ def writeData(name_in: str, zero_num: int, one_num: int, zero_in: np.ndarray, on
     return True
 
 
-def prepare(dataset_name: str, dataset_in: (np.ndarray, np.ndarray), pbar: tqdm):
+def prepare(dataset_name: str, dataset_in: (np.ndarray, np.ndarray), pbar: tqdm, num: int):
     data_in, classes_in = dataset_in
     labels_in = prepareLabels(classes_in)
     (_, classes_count) = labels_in.shape
     (instances_size, features_size) = data_in.shape
-    pbar.set_description("Processing %s:[%d, %d, %d]" % (dirname, instances_size, features_size, classes_count))
+    pbar.set_description("Processing %s/%d:[%d, %d, %d]" % (dirname, num, instances_size, features_size, classes_count))
 
     if features_size < target_features:
         return False
@@ -225,21 +273,21 @@ if __name__ == '__main__':
     target_instances = 64
     target_classes = 2
     raw_data_str = "./datasets/np_raw/"
-    done_data_str = f"./datasets/dprocessed_{target_features}_{target_instances}_{target_classes}/"
-    done_data_str_raw = f"./datasets/dprocessed_{target_features}_{target_instances}_{target_classes}/raw"
+    done_data_str = f"./datasets/sprocessed_{target_features}_{target_instances}_{target_classes}/"
+    done_data_str_raw = f"./datasets/sprocessed_{target_features}_{target_instances}_{target_classes}/raw"
     done_data_str_path = Path(f'{done_data_str}')
     done_data_str_path.mkdir(parents=True, exist_ok=True)
     done_data_str_raw_path = Path(f'{done_data_str_raw}')
     done_data_str_raw_path.mkdir(parents=True, exist_ok=True)
 
-    start_from = 0
+    start_from = 70
 
     non_processed = []
     for (dirpath, dirnames, filenames) in walk(raw_data_str):
         pbar = tqdm(enumerate(dirnames), total=len(dirnames))
         for cc, dirname in pbar:
             if cc >= start_from:
-                prepare_status = prepare(dirname, load(dirname), pbar)
+                prepare_status = prepare(dirname, load(dirname), pbar, cc)
                 if not prepare_status:
                     non_processed.append(dirname)
 
