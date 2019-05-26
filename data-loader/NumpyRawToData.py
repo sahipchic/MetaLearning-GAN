@@ -118,31 +118,93 @@ def getDist(a: np.ndarray, b: np.ndarray) -> float:
     return c + 0.00001
 
 
-def getColDistMatrix(zero_in: np.ndarray, one_in: np.ndarray) -> [[(int, int, float)]]:
+def getColDistMatrix(zero_in: np.ndarray, one_in: np.ndarray) -> [[float]]:
     data = np.concatenate((zero_in, one_in), axis=0)
 
-    matrix = []
-    for i in range(target_features):
+    dists = [[0] * (target_features + 1) for i in range(target_features + 1)]
+    for i in range(target_features + 1):
         for j in range(i + 1, target_features + 1):
             if i == 0:
-                matrix.append((i, j, 0.001))
+                dists[i][j] = dists[j][i] = 1
             else:
-                matrix.append((i, j, getDist(data[:, i - 1], data[:, j - 1])))
-    return matrix
+                dists[i][j] = dists[j][i] = getDist(data[:, i - 1], data[:, j - 1])
+    return dists
 
 
-def getRowDistMatrix(data_in: np.ndarray) -> [[(int, int, float)]]:
-    matrix = []
-    for i in range(target_instances):
+def getRowDistMatrix(data_in: np.ndarray) -> [[float]]:
+    dists = [[0] * (target_instances + 1) for i in range(target_instances + 1)]
+    for i in range(target_instances + 1):
         for j in range(i + 1, target_instances + 1):
             if i == 0:
-                matrix.append((i, j, 0.001))
+                dists[i][j] = dists[j][i] = 1
             else:
-                matrix.append((i, j, getDist(data_in[i - 1], data_in[j - 1])))
-    return matrix
+                dists[i][j] = dists[j][i] = getDist(data_in[i - 1], data_in[j - 1])
+    return dists
 
 
-import mlrose
+def held_karp(dists):
+    """
+    Implementation of Held-Karp, an algorithm that solves the Traveling
+    Salesman Problem using dynamic programming with memoization.
+    Parameters:
+        dists: distance matrix
+    Returns:
+        A tuple, (cost, path).
+    """
+    n = len(dists)
+
+    # Maps each subset of the nodes to the cost to reach that subset, as well
+    # as what node it passed before reaching this subset.
+    # Node subsets are represented as set bits.
+    C = {}
+
+    # Set transition cost from initial state
+    for k in range(1, n):
+        C[(1 << k, k)] = (dists[0][k], 0)
+
+    # Iterate subsets of increasing length and store intermediate results
+    # in classic dynamic programming manner
+
+    import itertools
+    for subset_size in range(2, n):
+        for subset in itertools.combinations(range(1, n), subset_size):
+            # Set bits for all nodes in this subset
+            bits = 0
+            for bit in subset:
+                bits |= 1 << bit
+
+            # Find the lowest cost to get to this subset
+            for k in subset:
+                prev = bits & ~(1 << k)
+
+                res = []
+                for m in subset:
+                    if m == 0 or m == k:
+                        continue
+                    res.append((C[(prev, m)][0] + dists[m][k], m))
+                C[(bits, k)] = min(res)
+
+    # We're interested in all bits but the least significant (the start state)
+    bits = (2 ** n - 1) - 1
+
+    # Calculate optimal cost
+    res = []
+    for k in range(1, n):
+        res.append((C[(bits, k)][0] + dists[k][0], k))
+    opt, parent = min(res)
+
+    # Backtrack to find full path
+    path = []
+    for i in range(n - 1):
+        path.append(parent)
+        new_bits = bits & ~(1 << parent)
+        _, parent = C[(bits, parent)]
+        bits = new_bits
+
+    # Add implicit start state
+    path.append(0)
+
+    return np.array(list(reversed(path)))
 
 
 def sortData(zero_in: np.ndarray, one_in: np.ndarray) -> (np.ndarray, np.ndarray):
@@ -150,8 +212,7 @@ def sortData(zero_in: np.ndarray, one_in: np.ndarray) -> (np.ndarray, np.ndarray
     one_out = np.copy(one_in)
     # sort cols
     matrix = getColDistMatrix(zero_in, one_in)
-    problem_fit = mlrose.TSPOpt(length=target_features + 1, maximize=False, distances=matrix)
-    best_state, best_fit = mlrose.genetic_alg(problem_fit, random_state=0, max_iters=50)
+    best_state = held_karp(matrix)
     zero_ind = -np.where(best_state == 0)[0]
     best_state = np.roll(best_state, zero_ind)
     best_state = np.delete(best_state, 0) - 1
@@ -159,8 +220,7 @@ def sortData(zero_in: np.ndarray, one_in: np.ndarray) -> (np.ndarray, np.ndarray
     one_out = one_out[:, best_state]
     # sort zero rows
     matrix = getRowDistMatrix(zero_out)
-    problem_fit = mlrose.TSPOpt(length=target_instances + 1, maximize=False, distances=matrix)
-    best_state, best_fit = mlrose.genetic_alg(problem_fit, pop_size=200, random_state=0, max_iters=15)
+    best_state = held_karp(matrix)
     zero_ind = -np.where(best_state == 0)[0]
     best_state = np.roll(best_state, zero_ind)
     best_state = np.delete(best_state, 0) - 1
@@ -168,8 +228,7 @@ def sortData(zero_in: np.ndarray, one_in: np.ndarray) -> (np.ndarray, np.ndarray
 
     # sort one rows
     matrix = getRowDistMatrix(one_out)
-    problem_fit = mlrose.TSPOpt(length=target_instances + 1, maximize=False, distances=matrix)
-    best_state, best_fit = mlrose.genetic_alg(problem_fit, pop_size=200, random_state=0, max_iters=15)
+    best_state = held_karp(matrix)
     zero_ind = -np.where(best_state == 0)[0]
     best_state = np.roll(best_state, zero_ind)
     best_state = np.delete(best_state, 0) - 1
@@ -280,7 +339,7 @@ if __name__ == '__main__':
     done_data_str_raw_path = Path(f'{done_data_str_raw}')
     done_data_str_raw_path.mkdir(parents=True, exist_ok=True)
 
-    start_from = 70
+    start_from = 0
 
     non_processed = []
     for (dirpath, dirnames, filenames) in walk(raw_data_str):
