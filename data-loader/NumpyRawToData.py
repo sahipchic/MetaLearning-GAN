@@ -280,7 +280,7 @@ if __name__ == '__main__':
     done_data_str_raw_path = Path(f'{done_data_str_raw}')
     done_data_str_raw_path.mkdir(parents=True, exist_ok=True)
 
-    start_from = 70
+    start_from = 0
 
     non_processed = []
     for (dirpath, dirnames, filenames) in walk(raw_data_str):
